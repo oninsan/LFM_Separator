@@ -2,27 +2,27 @@ blinker==1.9.0
 click==8.2.1
 colorama==0.4.6
 et_xmlfile==2.0.0
-flask==3.1.1
+flask==3.1.1f
 flask-cors==6.0.1
 importlib-metadata==8.7.0
 intel-openmp
 itsdangerous==2.2.0
 jinja2==3.1.6
-libblas
-libcblas
-libexpat
-libffi
-libhwloc
-libiconv
-liblapack
-liblzma
-libmpdec
-libsqlite
-libwinpthread
-libxml2
-libzlib
+# libblas
+# libcblas
+# libexpat
+# libffi
+# libhwloc
+# libiconv
+# liblapack
+# liblzma
+# libmpdec
+# libsqlite
+# libwinpthread
+# libxml2
+# libzlib
 markupsafe==3.0.2
-mkl
+# mkl
 numpy==2.3.0
 openpyxl==3.1.5
 openssl
