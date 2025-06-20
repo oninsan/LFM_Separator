@@ -39,5 +39,5 @@ def LFM_SEP():
     }
   )
 
-if __name__=='__main__':
-  api.run(port=5000)
+# if __name__=='__main__':
+#   api.run(port=5000)
