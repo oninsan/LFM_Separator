@@ -1,5 +1,4 @@
 blinker==1.9.0
-ca-certificates
 click==8.2.1
 colorama==0.4.6
 et_xmlfile==2.0.0
