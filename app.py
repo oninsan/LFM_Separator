@@ -82,9 +82,9 @@ def image_to_excel():
         print(f"❌ Exception: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/')
-def home():
-    return "Image to Structured Excel Name Extractor API is running!"
+# @app.route('/')
+# def home():
+#     return "Image to Structured Excel Name Extractor API is running!"
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+# if __name__ == '__main__':
+#     app.run(debug=True, port=5000)
