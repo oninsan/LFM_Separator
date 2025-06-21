@@ -1,44 +1,5 @@
-blinker==1.9.0
-click==8.2.1
-colorama==0.4.6
-et_xmlfile==2.0.0
-flask==3.1.1
-flask-cors==6.0.1
-importlib-metadata==8.7.0
-intel-openmp
-itsdangerous==2.2.0
-jinja2==3.1.6
-# libblas
-# libcblas
-# libexpat
-# libffi
-# libhwloc
-# libiconv
-# liblapack
-# liblzma
-# libmpdec
-# libsqlite
-# libwinpthread
-# libxml2
-# libzlib
-markupsafe==3.0.2
-# mkl
-numpy==2.3.0
-openpyxl==3.1.5
-# openssl
-pandas==2.3.0
-pip==25.1.1
-# python-dateutil==2.9.0.post0
-# python-tzdata==2025.2
-# python_abi
-pytz==2025.2
-six==1.17.0
-# tbb
-# tk
-# tzdata
-# ucrt
-# vc
-# vc14_runtime
-werkzeug==3.1.3
-xlsxwriter==3.2.3
-zipp==3.23.0
+flask
+flask-cors
+pandas
+pytesseract
+Pillow
