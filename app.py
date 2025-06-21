@@ -1,43 +1,90 @@
-import pandas as pd
-from flask import Flask, request, jsonify
+import re
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-import io
-import base64
+from werkzeug.utils import secure_filename
+import pandas as pd
+import pytesseract
+from PIL import Image, ImageOps
+from io import BytesIO
 
-api = Flask(__name__)
-CORS(api)
-@api.route('/api/lfm', methods=['POST'])
-def LFM_SEP():
-  workbook = request.files['workbook']
-  xls = pd.ExcelFile(workbook)
-  output = io.BytesIO()
+app = Flask(__name__)
+CORS(app)
 
-  with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-    for sheet_name in xls.sheet_names:
-      raw = pd.read_excel(xls, sheet_name=sheet_name)
-      for col in raw.columns:
-        # get the Last Name
-        raw['Last Name'] = raw[col].str.split(',').str[0].str.strip()
-        # get the First Name
-        first_middle = raw[col].str.split(',').str[1].str.strip()
-        raw['First Name'] = first_middle.str.split().apply(lambda x: ' '.join(x[:-1]) if len(x) > 1 else x[0])
-        # get the Middle Initial
-        raw['Middle Initial'] = raw[col].str.split().apply(lambda x: x[-1][0]+'.' if len(x) > 1 else '')
-        raw = raw.drop(columns=[col])
-        raw = raw.sort_values('Last Name', ascending=True)
-        break  # Only process the first column
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
 
-      raw.to_excel(writer, sheet_name=sheet_name, index=False)
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-  output.seek(0)
-  return (
-    output.read(),
-    200,
-    {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename=processed.xlsx'
-    }
-  )
+@app.route('/api/lfm', methods=['POST'])
+def image_to_excel():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part in the request"}), 400
 
-# if __name__=='__main__':
-#   api.run(port=5000)
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Only image files (png, jpg, jpeg, bmp) are allowed."}), 400
+
+    try:
+        print("🖼️ Processing image with Tesseract OCR...")
+        image = Image.open(file.stream)
+        image = ImageOps.expand(image, border=(0, 10, 0, 0), fill='white')
+
+        text = pytesseract.image_to_string(image, lang='eng+spa')
+
+        ocr_names = []
+
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+
+            # Remove "Name:" or similar prefixes
+            line = re.sub(r'^(name\s*[:\-]*)', '', line, flags=re.IGNORECASE).strip()
+
+            # Try to find names like "Lastname, Firstname Middlename"
+            match = re.search(r"([A-ZÑñ][A-ZÑñ\s\-\.]+),\s*([A-ZÑñ\s\-\.]+)", line, re.IGNORECASE)
+            if match:
+                last = match.group(1).strip()
+                right = match.group(2).strip()
+                first = ' '.join(right.split()[:-1]) if len(right.split()) > 1 else right
+                middle = right.split()[-1][0] + '.' if len(right.split()) > 1 else ''
+                ocr_names.append([last, first, middle])
+                continue
+
+            # Optional fallback if comma is missing but format is valid (Lastname Firstname Middlename)
+            words = line.split()
+            if len(words) >= 2 and all(re.match(r"^[A-ZÑñ\-\.]+$", w, re.IGNORECASE) for w in words):
+                last = words[0]
+                first = ' '.join(words[1:-1]) if len(words) > 2 else words[1]
+                middle = words[-1][0] + '.' if len(words) > 2 else ''
+                ocr_names.append([last, first, middle])
+
+        if not ocr_names:
+            return jsonify({"error": "No names could be extracted from the image."}), 400
+
+        # Build DataFrame
+        df = pd.DataFrame(ocr_names, columns=["Last Name", "First Name", "Middle Initial"])
+        df = df.sort_values(by="Last Name")
+
+        # Write to Excel in memory
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='Names', index=False)
+
+        output.seek(0)
+        print("✅ Final structured Excel generated.")
+        return send_file(output, as_attachment=True, download_name='structured_names.xlsx')
+
+    except Exception as e:
+        print(f"❌ Exception: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/')
+def home():
+    return "Image to Structured Excel Name Extractor API is running!"
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
