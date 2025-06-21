@@ -1,4 +1,4 @@
-FROM python:3.13-limit
+FROM python:3.13.5
 
 # Install Tesseract and its dependencies
 RUN apt-get update && \
