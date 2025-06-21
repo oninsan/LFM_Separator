@@ -4,7 +4,6 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import pandas as pd
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 from PIL import Image, ImageOps
 from io import BytesIO
 
