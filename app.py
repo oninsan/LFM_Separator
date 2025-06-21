@@ -32,7 +32,7 @@ def image_to_excel():
         image = Image.open(file.stream)
         image = ImageOps.expand(image, border=(0, 10, 0, 0), fill='white')
 
-        text = pytesseract.image_to_string(image, lang='eng+spa')
+        text = pytesseract.image_to_string(image, lang='eng')
 
         ocr_names = []
 
