@@ -4,7 +4,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import pdfplumber
 import pandas as pd
-from paddleocr import PaddleOCR
+import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
 from io import BytesIO
@@ -15,9 +15,7 @@ CORS(app)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-ocr = PaddleOCR(use_angle_cls=True, lang='en')  # OCR fallback
-
-@app.route('/api/pdf-to-excel', methods=['POST'])
+@app.route('/api/lfm', methods=['POST'])
 def pdf_to_excel():
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
@@ -29,13 +27,12 @@ def pdf_to_excel():
     if not file.filename.lower().endswith('.pdf'):
         return jsonify({"error": "Only PDF files are allowed."}), 400
 
-    # Save PDF file
     filename = secure_filename(file.filename)
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
 
     try:
-        all_tables = []
+        names = []
 
         with pdfplumber.open(filepath) as pdf:
             has_text = any(page.extract_text() for page in pdf.pages)
@@ -46,41 +43,48 @@ def pdf_to_excel():
                     tables = page.extract_tables()
                     for table in tables:
                         if table and len(table) > 1:
-                            df = pd.DataFrame(table[1:], columns=table[0])
-                            all_tables.append(df)
+                            headers = table[0]
+                            name_idx = None
+                            # Try to find the index of the 'Name' column
+                            for i, col in enumerate(headers):
+                                if col and 'name' in col.lower():
+                                    name_idx = i
+                                    break
 
-                if all_tables:
-                    df_result = pd.concat(all_tables, ignore_index=True)
+                            if name_idx is not None:
+                                for row in table[1:]:
+                                    if len(row) > name_idx and row[name_idx]:
+                                        names.append([row[name_idx].strip()])
+
+                if names:
+                    df_result = pd.DataFrame(names, columns=["Name"])
                     output = BytesIO()
                     df_result.to_excel(output, index=False)
                     output.seek(0)
-                    print("✅ Extracted tables from text PDF.")
-                    return send_file(output, as_attachment=True, download_name='output.xlsx')
+                    print("✅ Name column extracted from table.")
+                    return send_file(output, as_attachment=True, download_name='names.xlsx')
 
-        # Fallback to OCR
-        print("⚠️ No tables found. Falling back to OCR.")
+        # Fallback to OCR using pytesseract
+        print("⚠️ No table text found. Using Tesseract OCR fallback.")
         images = convert_from_path(filepath, dpi=300)
-        lines = []
+        ocr_names = []
 
-        for i, img in enumerate(images):
-            temp_path = os.path.join(UPLOAD_FOLDER, f"page_{i}.png")
-            img.save(temp_path, "PNG")
-            result = ocr.predict(temp_path)
-            for line in result[0]:
-                text = line[1][0]
-                if text.strip():
-                    lines.append([text])
+        for img in images:
+            text = pytesseract.image_to_string(img)
+            for line in text.split('\n'):
+                line = line.strip()
+                if ',' in line and any(char.isalpha() for char in line):
+                    ocr_names.append([line])
 
-        if not lines:
-            return jsonify({"error": "No text could be extracted from PDF."}), 400
+        if not ocr_names:
+            return jsonify({"error": "No names could be extracted from the PDF using OCR."}), 400
 
-        df = pd.DataFrame(lines)
+        df = pd.DataFrame(ocr_names, columns=["Name"])
         output = BytesIO()
-        df.to_excel(output, index=False, header=False)
+        df.to_excel(output, index=False)
         output.seek(0)
-
-        print("✅ OCR-based Excel created.")
-        return send_file(output, as_attachment=True, download_name='output_ocr.xlsx')
+        print("✅ OCR-based name list created using Tesseract.")
+        return send_file(output, as_attachment=True, download_name='names_ocr.xlsx')
 
     except Exception as e:
         print(f"❌ Exception: {e}")
@@ -88,7 +92,7 @@ def pdf_to_excel():
 
 @app.route('/')
 def home():
-    return "PDF to Excel API is running!"
+    return "PDF to Excel Name Extractor API (Tesseract version) is running!"
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
