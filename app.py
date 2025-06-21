@@ -3,15 +3,15 @@ from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import pandas as pd
-import pytesseract
-pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 from PIL import Image, ImageOps
 from io import BytesIO
+import easyocr
 
 app = Flask(__name__)
 CORS(app)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
+reader = easyocr.Reader(['en'], gpu=False)  # Load EasyOCR once
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -29,15 +29,15 @@ def image_to_excel():
         return jsonify({"error": "Only image files (png, jpg, jpeg, bmp) are allowed."}), 400
 
     try:
-        print("🖼️ Processing image with Tesseract OCR...")
+        print("🖼️ Processing image with EasyOCR...")
         image = Image.open(file.stream)
         image = ImageOps.expand(image, border=(0, 10, 0, 0), fill='white')
+        image_rgb = image.convert("RGB")
 
-        text = pytesseract.image_to_string(image, lang='eng+spa')
-
+        results = reader.readtext(np.array(image_rgb), detail=0)
         ocr_names = []
 
-        for line in text.split('\n'):
+        for line in results:
             line = line.strip()
             if not line:
                 continue
@@ -55,7 +55,7 @@ def image_to_excel():
                 ocr_names.append([last, first, middle])
                 continue
 
-            # Optional fallback if comma is missing but format is valid (Lastname Firstname Middlename)
+            # Optional fallback if comma is missing but format is valid
             words = line.split()
             if len(words) >= 2 and all(re.match(r"^[A-ZÑñ\-\.]+$", w, re.IGNORECASE) for w in words):
                 last = words[0]
@@ -83,9 +83,9 @@ def image_to_excel():
         print(f"❌ Exception: {e}")
         return jsonify({"error": str(e)}), 500
 
-# @app.route('/')
-# def home():
-#     return "Image to Structured Excel Name Extractor API is running!"
+@app.route('/')
+def home():
+    return "Image to Structured Excel Name Extractor API (EasyOCR version) is running!"
 
-# if __name__ == '__main__':
-#     app.run(debug=True, port=5000)
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
