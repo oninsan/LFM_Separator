@@ -6,9 +6,6 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Confirm Tesseract install
-RUN which tesseract && tesseract --version
-
 # Set up app directory
 WORKDIR /app
 COPY . .
