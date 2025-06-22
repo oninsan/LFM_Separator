@@ -1,11 +1,5 @@
 FROM python:3.13.5
 
-# Install Tesseract and its dependencies
-RUN apt-get update && \
-    apt-get install -y tesseract-ocr libgl1 && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
 # Set up app directory
 WORKDIR /app
 COPY . .
