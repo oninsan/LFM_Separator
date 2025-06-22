@@ -1,7 +1,6 @@
 flask
 flask-cors
 pandas
-pytesseract
 Pillow
 xlsxwriter
 gunicorn
