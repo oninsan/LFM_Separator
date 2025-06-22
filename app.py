@@ -1,4 +1,6 @@
+
 import re
+import gc
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -68,7 +70,7 @@ def image_to_excel():
         # Sort names by Last Name
         ocr_names.sort(key=lambda x: x[0].lower())
 
-        # ✅ Use xlsxwriter directly with constant_memory
+        # Use xlsxwriter directly with constant_memory
         output = BytesIO()
         workbook = xlsxwriter.Workbook(output, {'in_memory': True, 'constant_memory': True})
         worksheet = workbook.add_worksheet("Names")
@@ -82,6 +84,10 @@ def image_to_excel():
 
         workbook.close()
         output.seek(0)
+
+        # Force garbage collection to free memory
+        del ocr_names, text, image, workbook, worksheet
+        gc.collect()
 
         print("✅ Final structured Excel generated.")
         return send_file(output, as_attachment=True, download_name='structured_names.xlsx')
