@@ -1,43 +1,100 @@
-import pandas as pd
-from flask import Flask, request, jsonify
+import re
+import gc
+import pdfplumber
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-import io
-import base64
+from io import BytesIO
+import xlsxwriter
 
-api = Flask(__name__)
-CORS(api)
-@api.route('/api/lfm', methods=['POST'])
-def LFM_SEP():
-  workbook = request.files['workbook']
-  xls = pd.ExcelFile(workbook)
-  output = io.BytesIO()
+app = Flask(__name__)
+CORS(app)
 
-  with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-    for sheet_name in xls.sheet_names:
-      raw = pd.read_excel(xls, sheet_name=sheet_name)
-      for col in raw.columns:
-        # get the Last Name
-        raw['Last Name'] = raw[col].str.split(',').str[0].str.strip()
-        # get the First Name
-        first_middle = raw[col].str.split(',').str[1].str.strip()
-        raw['First Name'] = first_middle.str.split().apply(lambda x: ' '.join(x[:-1]) if len(x) > 1 else x[0])
-        # get the Middle Initial
-        raw['Middle Initial'] = raw[col].str.split().apply(lambda x: x[-1][0]+'.' if len(x) > 1 else '')
-        raw = raw.drop(columns=[col])
-        raw = raw.sort_values('Last Name', ascending=True)
-        break  # Only process the first column
+ALLOWED_EXTENSIONS = {'pdf'}
+stopwords = {
+    "section", "name", "namelist", "grade", "list", "student", "students",
+    "cebu", "roosevelt", "memorial", "colleges", "bogo", "city", "prof", "nino", "abao"
+}
 
-      raw.to_excel(writer, sheet_name=sheet_name, index=False)
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-  output.seek(0)
-  return (
-    output.read(),
-    200,
-    {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename=processed.xlsx'
-    }
-  )
+@app.route('/api/lfm', methods=['POST'])
+def pdf_text_to_excel():
+    files = request.files.getlist('file')
+    if not files or all(f.filename == '' for f in files):
+        return jsonify({"error": "No selected file(s)"}), 400
 
-# if __name__=='__main__':
-#   api.run(port=5000)
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True, 'constant_memory': True})
+
+    for file in files:
+        if not allowed_file(file.filename):
+            continue
+
+        print(f"📄 Reading PDF for text: {file.filename}")
+        ocr_names = []
+        try:
+            with pdfplumber.open(file.stream) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if not text:
+                        continue
+
+                    for line in text.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+
+                        if any(sw in line.lower() for sw in stopwords):
+                            continue
+
+                        if re.fullmatch(r'[\d\W_]+', line):
+                            continue
+
+                        line = re.sub(r'\d+', '', line)
+                        line = re.sub(r"[^A-Za-zÑñ\s,\.\-']", '', line)
+
+                        if ',' not in line:
+                            continue
+
+                        line = re.sub(r'^(name\s*[:\-]*)', '', line, flags=re.IGNORECASE).strip()
+
+                        suffixes = {"BSIT", "BSCS", "BSCPE", "BSCE", "BSME", "BSEE", "BSBA", "BSN", "BS", "AB", "JR", "SR", "III", "IV", "II"}
+
+                        match = re.search(r"([^,]+),\s+(.+)", line)
+                        if match:
+                            last = match.group(1).lstrip('-').strip()
+                            first_middle = match.group(2).strip()
+
+                            name_parts = [word for word in first_middle.split() if word.isalpha()]
+                            while name_parts and name_parts[-1].upper() in suffixes:
+                                name_parts.pop()
+
+                            if len(name_parts) == 0:
+                                continue
+                            elif len(name_parts) == 1:
+                                first = name_parts[0]
+                                middle = ''
+                            else:
+                                first = ' '.join(name_parts[:-1])
+                                middle = name_parts[-1][0].upper() + '.'
+
+                            ocr_names.append([last, first, middle])
+        except Exception as e:
+            print(f"❌ Exception processing {file.filename}: {e}")
+            continue
+
+        ocr_names.sort(key=lambda x: x[0].lower())
+        # Use filename (without extension) as sheet name, max 31 chars for Excel
+        sheet_name = file.filename.rsplit('.', 1)[0][:31] or "Sheet"
+        worksheet = workbook.add_worksheet(sheet_name)
+        worksheet.write_row(0, 0, ['Last Name', 'First Name', 'Middle Initial'])
+        for row_num, row_data in enumerate(ocr_names, start=1):
+            worksheet.write_row(row_num, 0, row_data)
+
+    workbook.close()
+    output.seek(0)
+    gc.collect()
+
+    print("✅ Final structured Excel with multiple sheets generated from PDFs.")
+    return send_file(output, as_attachment=True, download_name='structured_names.xlsx')
