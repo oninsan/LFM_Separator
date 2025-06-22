@@ -61,7 +61,7 @@ def pdf_text_to_excel():
 
                         line = re.sub(r'^(name\s*[:\-]*)', '', line, flags=re.IGNORECASE).strip()
 
-                        suffixes = {"BSIT", "BSCS", "BSCPE", "BSCE", "BSME", "BSEE", "BSBA", "BSN", "BS", "AB", "JR", "SR", "III", "IV", "II"}
+                        suffixes = {"BSIT", "BSCS", "BSCPE", "BSCE", "BSME", "BSEE", "BSBA", "BSN", "BS", "AB", "JR", "SR","JR.", "SR.", "III", "IV", "II"}
 
                         match = re.search(r"([^,]+),\s+(.+)", line)
                         if match:
