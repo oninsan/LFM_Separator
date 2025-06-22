@@ -12,7 +12,9 @@ CORS(app)
 ALLOWED_EXTENSIONS = {'pdf'}
 stopwords = {
     "section", "name", "namelist", "grade", "list", "student", "students",
-    "cebu", "roosevelt", "memorial", "colleges", "bogo", "city", "prof", "nino", "abao"
+    "cebu", "roosevelt", "memorial", "colleges", "bogo", "city", "prof", "nino, abao",
+    "marjorie, reso", "joel, lim", "windel, pelayo", "jonel, gelig","leonard, balabat",
+    "carl joshua, cosep", "hilarion, raganas"
 }
 
 def allowed_file(filename):
