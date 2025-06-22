@@ -1,4 +1,5 @@
 import re
+import gc
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -28,23 +29,30 @@ def image_to_excel():
         return jsonify({"error": "Only image files (png, jpg, jpeg, bmp) are allowed."}), 400
 
     try:
-        print("🖼️ Starting OCR process...")
-        with Image.open(file.stream).convert("L") as image:  # Grayscale to reduce memory usage
-            image = image.crop(image.getbbox())  # Trim extra white space if possible
+        print("🖼️ Running lightweight OCR...")
 
-            # Perform OCR
-            text = pytesseract.image_to_string(image, lang='eng')
+        # Open as grayscale and crop whitespace
+        with Image.open(file.stream).convert("L") as image:
+            bbox = image.getbbox()
+            if bbox:
+                image = image.crop(bbox)
 
+            # OCR with optimized settings
+            text = pytesseract.image_to_string(image, lang='eng', config='--psm 6')
+
+        del image
+        gc.collect()
+
+        # Process text lines
         ocr_names = []
         for line in text.splitlines():
             line = line.strip()
             if not line:
                 continue
 
-            # Remove "Name:" or similar prefixes
             line = re.sub(r'^(name\s*[:\-]*)', '', line, flags=re.IGNORECASE).strip()
 
-            # Match "Lastname, Firstname Middlename"
+            # "Lastname, Firstname Middlename"
             match = re.search(r"([A-ZÑñ][A-ZÑñ\s\-\.]+),\s*([A-ZÑñ\s\-\.]+)", line, re.IGNORECASE)
             if match:
                 last = match.group(1).strip()
@@ -52,7 +60,7 @@ def image_to_excel():
                 if right:
                     first = ' '.join(right[:-1]) if len(right) > 1 else right[0]
                     middle = right[-1][0] + '.' if len(right) > 1 else ''
-                    ocr_names.append([last, first, middle])
+                    ocr_names.append((last, first, middle))
                 continue
 
             # Fallback: "Lastname Firstname Middlename"
@@ -61,19 +69,25 @@ def image_to_excel():
                 last = parts[0]
                 first = ' '.join(parts[1:-1]) if len(parts) > 2 else parts[1]
                 middle = parts[-1][0] + '.' if len(parts) > 2 else ''
-                ocr_names.append([last, first, middle])
+                ocr_names.append((last, first, middle))
 
         if not ocr_names:
             return jsonify({"error": "No names could be extracted from the image."}), 400
 
+        # Directly create DataFrame
         df = pd.DataFrame(ocr_names, columns=["Last Name", "First Name", "Middle Initial"])
         df.sort_values("Last Name", inplace=True)
 
+        # Generate Excel in memory
         output = BytesIO()
-        df.to_excel(output, index=False)
-        output.seek(0)
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='Names', index=False)
 
-        print("✅ Done generating Excel.")
+        output.seek(0)
+        del df
+        gc.collect()
+
+        print("✅ Excel generated.")
         return send_file(output, as_attachment=True, download_name='structured_names.xlsx')
 
     except Exception as e:
